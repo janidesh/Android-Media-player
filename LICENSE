@@ -275,3 +275,408 @@ version(s), and exceptions or additional permissions here}."
   look for such a notice.
 
   You may add additional accurate notices of copyright ownership.
+
+
+The CODE$#######
+
+
+package com.example.firstandroidappbyjanith
+
+import android.Manifest
+import android.content.ContentUris
+import android.content.Context
+import android.media.audiofx.Equalizer
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.provider.MediaStore
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.delay
+
+@UnstableApi
+class MainActivity : ComponentActivity() {
+    private var exoPlayer: ExoPlayer? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // APEX AUDIO OPTIMIZATION
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .build()
+
+        exoPlayer = ExoPlayer.Builder(this).build().apply {
+            setAudioAttributes(audioAttributes, true)
+            playWhenReady = true
+        }
+
+        setContent {
+            val context = LocalContext.current
+            val uriHandler = LocalUriHandler.current
+            var mediaList by remember { mutableStateOf(listOf<MediaFile>()) }
+            var selectedFile by remember { mutableStateOf<MediaFile?>(null) }
+            var isFullScreen by remember { mutableStateOf(false) }
+            var showSplash by remember { mutableStateOf(true) }
+            var currentCategory by remember { mutableStateOf("AUDIO") }
+
+            val purePurple = Color(0xFF9D00FF)
+            val hotPink = Color(0xFFFF00E5)
+
+            val permissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestMultiplePermissions()
+            ) { perms -> if (perms.values.all { it }) mediaList = scanDeviceForMedia(context) }
+
+            // Splash Logic
+            LaunchedEffect(Unit) {
+                delay(2000)
+                showSplash = false
+                permissionLauncher.launch(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    arrayOf(Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO)
+                } else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
+            }
+
+            // APEX MESH BACKGROUND
+            Box(modifier = Modifier.fillMaxSize().background(Color(0xFF030008))) {
+                Box(modifier = Modifier.fillMaxSize().blur(100.dp)) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawCircle(purePurple.copy(0.25f), radius = 1000f, center = Offset(size.width, 0f))
+                        drawCircle(hotPink.copy(0.2f), radius = 800f, center = Offset(0f, size.height))
+                    }
+                }
+
+                if (showSplash) {
+                    JanithApexSplash(purePurple)
+                } else {
+                    Column(modifier = Modifier.fillMaxSize().padding(20.dp).statusBarsPadding()) {
+                        Text(
+                            text = "Janith Rathnayake Creations",
+                            style = TextStyle(color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Black, shadow = Shadow(purePurple, Offset(0f, 0f), 25f))
+                        )
+                        Text(
+                            text = "jdr.kesug.com",
+                            style = TextStyle(color = Color.Cyan.copy(0.6f)),
+                            modifier = Modifier.clickable { uriHandler.openUri("https://jdr.kesug.com") }
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Category Tab Selector
+                        Surface(color = Color.White.copy(0.05f), shape = RoundedCornerShape(15.dp), border = BorderStroke(1.dp, Color.White.copy(0.1f))) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
+                                listOf("AUDIO", "VIDEO").forEach { cat ->
+                                    Box(
+                                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                                            .background(if(currentCategory == cat) purePurple.copy(0.4f) else Color.Transparent)
+                                            .clickable { currentCategory = cat }
+                                            .padding(12.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(cat, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(15.dp))
+
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            val filtered = if(currentCategory == "VIDEO") mediaList.filter { it.isVideo } else mediaList.filter { !it.isVideo }
+                            items(filtered) { file ->
+                                GlassApexCard(file) {
+                                    selectedFile = file
+                                    isFullScreen = true
+                                    playMedia(file.uri)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // APEX GOLD PLAYER OVERLAY (Glassified)
+                AnimatedVisibility(visible = isFullScreen, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
+                    selectedFile?.let { file ->
+                        PlayerOverlay(file, exoPlayer!!, sanitizer = { killEqualizer() }, onBack = { isFullScreen = false })
+                    }
+                }
+            }
+        }
+    }
+
+    private fun playMedia(uri: Uri) {
+        exoPlayer?.apply {
+            stop()
+            clearMediaItems()
+            setMediaItem(MediaItem.fromUri(uri))
+            volume = 1.0f
+            prepare()
+            play()
+        }
+    }
+
+    private fun killEqualizer() {} // Stubs
+
+    override fun onDestroy() {
+        super.onDestroy()
+        exoPlayer?.release()
+    }
+}
+
+// --- APEX GOLD PLAYER (The Overhaul) ---
+
+@OptIn(UnstableApi::class)
+@Composable
+fun PlayerOverlay(file: MediaFile, player: ExoPlayer, sanitizer: () -> Unit, onBack: () -> Unit) {
+    var isPlaying by remember { mutableStateOf(player.isPlaying) }
+    var progress by remember { mutableStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+    var currentMode by remember { mutableStateOf("Normal") }
+    var eq by remember { mutableStateOf<Equalizer?>(null) }
+
+    val neonPurple = Color(0xFF9D00FF)
+    val neonCyan = Color(0xFF00FFFF)
+
+    BackHandler { sanitizer(); onBack() }
+
+    fun refreshEQ() {
+        val sessionId = player.audioSessionId
+        if (sessionId != -1) {
+            try {
+                eq?.release()
+                eq = Equalizer(0, sessionId).apply { enabled = true; applyEqualizer(this, currentMode) }
+            } catch (e: Exception) { eq = null }
+        }
+    }
+
+    LaunchedEffect(player) {
+        // Safe seek listener
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) { refreshEQ() }
+            }
+        })
+
+        while(true) {
+            isPlaying = player.isPlaying
+            if (!isDragging && player.duration > 0) progress = player.currentPosition.toFloat() / player.duration
+            if (player.isPlaying && eq == null) { refreshEQ() }
+            delay(500)
+        }
+    }
+
+    // 1. LIQUID ULTRA BLUR LAYER
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0A0015).copy(0.9f))) {
+        // Deep Ambient Puddles
+        val infinite = rememberInfiniteTransition(label = "")
+        val blobOffset by infinite.animateFloat(0f, 1000f, infiniteRepeatable(tween(20000), RepeatMode.Reverse), label = "")
+
+        Canvas(modifier = Modifier.fillMaxSize().blur(70.dp)) {
+            drawCircle(neonPurple.copy(0.12f), radius = 900f, center = Offset(blobOffset % size.width, size.height / 2f))
+            drawCircle(neonCyan.copy(0.08f), radius = 700f, center = Offset(size.width - (blobOffset % size.width), size.height))
+        }
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Glass Header
+            Row(modifier = Modifier.fillMaxWidth().padding(15.dp).statusBarsPadding(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.KeyboardArrowDown, null, tint = Color.White) }
+                Text(file.name, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f).padding(horizontal = 10.dp))
+            }
+
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                if (file.isVideo) {
+                    AndroidView(factory = { PlayerView(it).apply { this.player = player; useController = false } }, modifier = Modifier.fillMaxHeight(0.8f).clip(RoundedCornerShape(20.dp)))
+                } else {
+                    // 2. ROTATING DYNAMIC GLASS ROTATOR
+                    ApexGlassRotator(neonPurple, neonCyan)
+                }
+            }
+
+            // CONTROLS ACRYLIC ZONE
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(24.dp).navigationBarsPadding().graphicsLayer(shadowElevation = 40f, shape = RoundedCornerShape(40.dp)),
+                color = Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(40.dp),
+                border = BorderStroke(1.dp, Color.White.copy(0.15f))
+            ) {
+                Column(modifier = Modifier.padding(25.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    // EQ Selector
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        listOf("Normal", "Bass", "Ultra").forEach { mode ->
+                            Text(
+                                mode,
+                                modifier = Modifier.clickable { currentMode = mode; refreshEQ() },
+                                color = if(currentMode == mode) neonCyan else Color.White.copy(0.6f),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // APEX PROGRESS BAR (Glassified)
+                    Slider(
+                        value = progress,
+                        onValueChange = { isDragging = true; progress = it },
+                        onValueChangeFinished = {
+                            isDragging = false
+                            player.seekTo((progress * player.duration).toLong())
+                            player.pause()
+                            refreshEQ()
+                            player.play()
+                        },
+                        colors = SliderDefaults.colors(thumbColor = neonCyan, activeTrackColor = neonPurple, inactiveTrackColor = Color.Transparent),
+                        modifier = Modifier.graphicsLayer(alpha = 0.8f)
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Controls
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { player.seekTo(player.currentPosition - 10000) }) { Icon(Icons.Default.Replay10, null, tint = Color.White, modifier = Modifier.size(35.dp)) }
+
+                        Box(modifier = Modifier.size(75.dp).clip(CircleShape).background(Brush.linearGradient(listOf(neonPurple, neonCyan))).clickable {
+                            if(player.isPlaying) player.pause() else { player.play(); refreshEQ() }
+                        }, contentAlignment = Alignment.Center) {
+                            Icon(if(isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(40.dp))
+                        }
+
+                        IconButton(onClick = { player.seekTo(player.currentPosition + 10000) }) { Icon(Icons.Default.Forward10, null, tint = Color.White, modifier = Modifier.size(35.dp)) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- UI COMPONENTS ---
+
+@Composable
+fun JanithApexSplash(glowColor: Color) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Janith", style = TextStyle(color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Black, shadow = Shadow(glowColor, Offset(0f, 0f), 40f)))
+            Text("Creations", color = Color.Cyan, style = TextStyle(letterSpacing = 8.sp, fontSize = 14.sp))
+        }
+    }
+}
+
+@Composable
+fun ApexGlassRotator(accent: Color, cyan: Color) {
+    val infinite = rememberInfiniteTransition(label = "")
+    val rot by infinite.animateFloat(0f, 360f, infiniteRepeatable(tween(15000, easing = LinearEasing)), label = "")
+    val scale by infinite.animateFloat(1f, 1.15f, infiniteRepeatable(tween(1000), RepeatMode.Reverse), label = "")
+
+    Box(contentAlignment = Alignment.Center) {
+        // Rotating Aura
+        Box(modifier = Modifier.size(280.dp).rotate(rot).drawBehind {
+            drawCircle(Brush.sweepGradient(listOf(accent, cyan, accent)), style = androidx.compose.ui.graphics.drawscope.Stroke(10f))
+        }.blur(25.dp))
+
+        // Glass Disc
+        Surface(
+            modifier = Modifier.size(220.dp).rotate(-rot).graphicsLayer(scaleX = scale, scaleY = scale, shadowElevation = 50f),
+            shape = CircleShape,
+            color = Color.White.copy(0.08f),
+            border = BorderStroke(2.dp, Color.White.copy(0.2f))
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("🎵", fontSize = 100.sp, modifier = Modifier.graphicsLayer(shadowElevation = 30f))
+            }
+        }
+    }
+}
+
+@Composable
+fun GlassApexCard(file: MediaFile, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        color = Color.White.copy(0.06f),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, Color.White.copy(0.12f))
+    ) {
+        Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(45.dp).background(Color.White.copy(0.05f), CircleShape), contentAlignment = Alignment.Center) {
+                Text(if(file.isVideo) "🎬" else "🎶", fontSize = 20.sp)
+            }
+            Spacer(Modifier.width(15.dp))
+            Column {
+                Text(file.name, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text("APEX GOLD v6.1", color = Color.Cyan.copy(0.5f), style = TextStyle(fontSize = 10.sp))
+            }
+        }
+    }
+}
+
+// --- UTILS ---
+
+fun applyEqualizer(eq: Equalizer, mode: String) {
+    val bands = eq.numberOfBands.toInt()
+    for(i in 0 until bands) {
+        when(mode) {
+            "Bass" -> eq.setBandLevel(0, 1400)
+            "Ultra" -> { eq.setBandLevel(0, 1100); eq.setBandLevel((bands-1).toShort(), 1100) }
+            else -> eq.setBandLevel(i.toShort(), 0)
+        }
+    }
+}
+
+data class MediaFile(val uri: Uri, val name: String, val isVideo: Boolean)
+
+fun scanDeviceForMedia(context: Context): List<MediaFile> {
+    val list = mutableListOf<MediaFile>()
+    val vUri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+    val aUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+    context.contentResolver.query(vUri, arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME), null, null, null)?.use { c ->
+        val idCol = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+        val nameCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+        while (c.moveToNext()) list.add(MediaFile(ContentUris.withAppendedId(vUri, c.getLong(idCol)), c.getString(nameCol) ?: "Video", true))
+    }
+    context.contentResolver.query(aUri, arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME), null, null, null)?.use { c ->
+        val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+        val nameCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+        while (c.moveToNext()) list.add(MediaFile(ContentUris.withAppendedId(aUri, c.getLong(idCol)), c.getString(nameCol) ?: "Audio", false))
+    }
+    return list.sortedBy { it.name }
+}
